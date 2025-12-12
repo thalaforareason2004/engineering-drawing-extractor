@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Engineering Drawing Extractor</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+        :root {
+            --primary-color: #007bff;
+            --bg-color: #f5f5f5;
+            --card-bg: #ffffff;
+            --text-color: #333;
+            --shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+            --radius: 8px;
+        }
+
+        body {
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #2c3e50;
+        }
+
+        /* Upload Section */
+        .upload-section {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .field-row {
+            margin-bottom: 12px;
+        }
+
+        .field-row label {
+            display: block;
+            margin-bottom: 4px;
+            font-size: 0.9em;
+            color: #555;
+        }
+
+        input[type="file"],
+        input[type="text"] {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 100%;
+            max-width: 400px;
+        }
+
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.2s;
+            margin-top: 8px;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        .loading {
+            display: none;
+            margin-top: 10px;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid var(--primary-color);
+            border-radius: 50%;
+            width: 28px;
+            height: 28px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 6px;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .error-msg {
+            color: #dc3545;
+            margin-top: 10px;
+            display: none;
+        }
+
+        /* Results */
+        .results-section {
+            display: none;
+        }
+
+        .section-title {
+            margin-top: 30px;
+            margin-bottom: 10px;
+            border-bottom: 2px solid #ddd;
+            padding-bottom: 8px;
+            font-size: 18px;
+        }
+
+        .annotated-container {
+            background: var(--card-bg);
+            padding: 16px;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            text-align: center;
+            margin-bottom: 24px;
+        }
+
+        .annotated-container img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 4px;
+        }
+
+        .summary-container {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+        }
+
+        .summary-image,
+        .summary-text {
+            flex: 1;
+            min-width: 280px;
+            background: var(--card-bg);
+            padding: 16px;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+        }
+
+        .summary-image img {
+            width: 100%;
+            height: auto;
+            border-radius: 4px;
+        }
+
+        .summary-text pre {
+            white-space: pre-wrap;
+            font-family: inherit;
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid #eee;
+            margin: 0;
+        }
+
+        .crops-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 16px;
+        }
+
+        .crop-card {
+            background: var(--card-bg);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .crop-header {
+            font-weight: bold;
+            font-size: 0.9em;
+            color: #555;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 4px;
+        }
+
+        .crop-images {
+            display: flex;
+            gap: 8px;
+        }
+
+        .crop-img-wrapper {
+            flex: 1;
+            text-align: center;
+        }
+
+        .crop-img-wrapper span {
+            display: block;
+            font-size: 0.8em;
+            color: #777;
+            margin-bottom: 4px;
+        }
+
+        .crop-img-wrapper img {
+            width: 100%;
+            height: auto;
+            border-radius: 4px;
+            border: 1px solid #eee;
+        }
+
+        .vlm-text {
+            font-size: 0.9em;
+            color: #666;
+            background: #f9f9f9;
+            padding: 6px;
+            border-radius: 4px;
+            margin-top: auto;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <h1>Engineering Drawing Extractor</h1>
+
+        <div class="upload-section">
+            <div class="field-row">
+                <label for="imageInput">Upload engineering drawing image:</label>
+                <input type="file" id="imageInput" accept="image/*">
+            </div>
+
+            <div class="field-row">
+                <label for="vlmUrlInput">VLM Gradio URL (optional):</label>
+                <input type="text" id="vlmUrlInput" placeholder="https://xxxxxx.gradio.live (from your VLM Colab)">
+            </div>
+
+            <button id="analyzeBtn">Analyze</button>
+
+            <div class="loading" id="loadingIndicator">
+                <div class="spinner"></div>
+                <span>Processing...</span>
+            </div>
+
+            <div class="error-msg" id="errorMsg"></div>
+        </div>
+
+        <div class="results-section" id="resultsSection">
+            <h2 class="section-title">Annotated Detection</h2>
+            <div class="annotated-container">
+                <img id="annotatedImg" alt="Annotated result">
+            </div>
+
+            <h2 class="section-title">Analysis Summary</h2>
+            <div class="summary-container">
+                <div class="summary-image">
+                    <h3>Original Image</h3>
+                    <img id="originalImg" alt="Original upload">
+                </div>
+                <div class="summary-text">
+                    <h3>LLM Summary</h3>
+                    <pre id="llmText">(No summary)</pre>
+                </div>
+            </div>
+
+            <h2 class="section-title">Detected Crops</h2>
+            <div class="crops-grid" id="cropsGrid"></div>
+        </div>
+    </div>
+
+    <script>
+        const analyzeBtn = document.getElementById("analyzeBtn");
+        const imageInput = document.getElementById("imageInput");
+        const vlmUrlInput = document.getElementById("vlmUrlInput");
+        const loadingIndicator = document.getElementById("loadingIndicator");
+        const errorMsg = document.getElementById("errorMsg");
+        const resultsSection = document.getElementById("resultsSection");
+        const annotatedImg = document.getElementById("annotatedImg");
+        const originalImg = document.getElementById("originalImg");
+        const llmText = document.getElementById("llmText");
+        const cropsGrid = document.getElementById("cropsGrid");
+
+        // Backend endpoint
+        const API_URL = "http://127.0.0.1:8000/analyze-page";
+
+        analyzeBtn.addEventListener("click", async () => {
+            // Reset state
+            errorMsg.style.display = "none";
+            errorMsg.textContent = "";
+            resultsSection.style.display = "none";
+            cropsGrid.innerHTML = "";
+            llmText.textContent = "(No summary)";
+
+            const file = imageInput.files[0];
+            if (!file) {
+                showError("Please select an image file first.");
+                return;
+            }
+
+            // Show original image immediately
+            originalImg.src = URL.createObjectURL(file);
+
+            // Loading UI
+            loadingIndicator.style.display = "flex";
+            analyzeBtn.disabled = true;
+
+            const formData = new FormData();
+            formData.append("file", file);
+
+            const vlmUrl = vlmUrlInput.value.trim();
+            if (vlmUrl) {
+                formData.append("vlm_url", vlmUrl);
+            }
+
+            try {
+                const resp = await fetch(API_URL, {
+                    method: "POST",
+                    body: formData,
+                });
+
+                if (!resp.ok) {
+                    const errText = await resp.text();
+                    throw new Error(`Server error: ${resp.status} - ${errText}`);
+                }
+
+                const data = await resp.json();
+                console.log("Backend response:", data);
+                renderResults(data);
+
+            } catch (err) {
+                console.error(err);
+                showError(err.message || "An error occurred during analysis.");
+            } finally {
+                loadingIndicator.style.display = "none";
+                analyzeBtn.disabled = false;
+            }
+        });
+
+        function showError(msg) {
+            errorMsg.textContent = msg;
+            errorMsg.style.display = "block";
+        }
+
+        function renderResults(data) {
+            // Annotated image
+            if (data.annotated_image) {
+                annotatedImg.src = data.annotated_image;
+            } else {
+                annotatedImg.src = "";
+            }
+
+            // LLM summary
+            llmText.textContent = data.llm_summary || "(No summary returned)";
+
+            // Crops
+            if (Array.isArray(data.crops) && data.crops.length > 0) {
+                data.crops.forEach((crop, index) => {
+                    const card = document.createElement("div");
+                    card.className = "crop-card";
+
+                    const header = document.createElement("div");
+                    header.className = "crop-header";
+                    const conf = typeof crop.conf === "number" ? crop.conf * 100 : 0;
+                    header.textContent = `#${index + 1} ${crop.cls_name} (Conf: ${conf.toFixed(1)}%)`;
+
+                    const imagesDiv = document.createElement("div");
+                    imagesDiv.className = "crop-images";
+
+                    const rawWrapper = createImgWrapper("Raw", crop.raw_crop);
+                    const enhWrapper = createImgWrapper("Enhanced", crop.enhanced_crop);
+                    imagesDiv.appendChild(rawWrapper);
+                    imagesDiv.appendChild(enhWrapper);
+
+                    const vlmDiv = document.createElement("div");
+                    vlmDiv.className = "vlm-text";
+                    vlmDiv.textContent = crop.vlm_text || "TODO: VLM output";
+
+                    card.appendChild(header);
+                    card.appendChild(imagesDiv);
+                    card.appendChild(vlmDiv);
+
+                    cropsGrid.appendChild(card);
+                });
+            } else {
+                const noCrops = document.createElement("div");
+                noCrops.textContent = "No crops detected.";
+                cropsGrid.appendChild(noCrops);
+            }
+
+            resultsSection.style.display = "block";
+        }
+
+        function createImgWrapper(label, src) {
+            const wrapper = document.createElement("div");
+            wrapper.className = "crop-img-wrapper";
+
+            const span = document.createElement("span");
+            span.textContent = label;
+
+            const img = document.createElement("img");
+            img.src = src || "";
+
+            wrapper.appendChild(span);
+            wrapper.appendChild(img);
+            return wrapper;
+        }
+    </script>
+
+</body>
+
+</html>
