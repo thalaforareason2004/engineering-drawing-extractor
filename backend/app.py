@@ -78,8 +78,8 @@ async def analyze_page(
     - Receives image + optional VLM URL.
     - Calls YOLO Space for detections + crops.
     - If VLM URL is provided, tries to call VLM:
-        - full page → full_page_vlm_text
-        - each enhanced crop → crop["vlm_text"]
+        - full page → full_page_vlm_text (two images + region_type='page')
+        - each crop → crop['vlm_text'] (two images + region_type=cls_name)
     - Builds analysis text (VLM-first, YOLO fallback) and calls LLM Space for a summary.
     """
     temp_dir = tempfile.mkdtemp()
@@ -119,9 +119,12 @@ async def analyze_page(
                 vlm_client = Client(vlm_url)
                 print(f"Loaded VLM API: {vlm_url}")
 
-                print("Calling VLM on full page...")
+                print("Calling VLM on full page (two images)...")
+                # We don't have a separate enhanced full-page yet, so use the same image twice
                 full_page_vlm_text = vlm_client.predict(
-                    image=handle_file(temp_file_path),
+                    raw_image=handle_file(temp_file_path),
+                    enhanced_image=handle_file(temp_file_path),
+                    region_type="page",
                     max_new_tokens=512,
                     api_name="/predict",
                 )
@@ -149,17 +152,18 @@ async def analyze_page(
             box      = det.get("box") or []
 
             vlm_text = None
-            if vlm_client:
+            if vlm_client and raw_crop_path:
                 try:
-                    # Prefer enhanced crop for VLM if available
-                    path_for_vlm = enh_crop_path or raw_crop_path
-                    if path_for_vlm:
-                        print(f"Calling VLM on crop {i}...")
-                        vlm_text = vlm_client.predict(
-                            image=handle_file(path_for_vlm),
-                            max_new_tokens=256,
-                            api_name="/predict",
-                        )
+                    print(f"Calling VLM on crop {i} (class={cls_name})...")
+                    # If no enhanced version, fall back to raw for both
+                    enhanced_for_vlm = enh_crop_path or raw_crop_path
+                    vlm_text = vlm_client.predict(
+                        raw_image=handle_file(raw_crop_path),
+                        enhanced_image=handle_file(enhanced_for_vlm),
+                        region_type=cls_name,   # "drawing", "title_block", "table", "details"
+                        max_new_tokens=256,
+                        api_name="/predict",
+                    )
                 except Exception as e:
                     print(f"Error calling VLM on crop {i}: {e}")
                     vlm_text = None
