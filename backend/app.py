@@ -11,26 +11,18 @@ import tempfile
 
 app = FastAPI()
 
-# CORS for local testing (relax later if you want to restrict origins)
+# CORS for frontend (Netlify etc.) – you can restrict origins later
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # e.g. ["https://your-netlify-site.netlify.app"]
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# HF Space clients (YOLO + LLM) using full URLs and ssl_verify=False
-# NOTE: ssl_verify=False is for local dev where corporate proxies/self-signed certs
-#       cause verification errors. Do not use this on untrusted networks.
-yolo_client = Client(
-    "https://jeyanthangj2004-engg-draw-extractor.hf.space",
-    ssl_verify=False,
-)
-llm_client = Client(
-    "https://jeyanthangj2004-eng-draw-llm-flan-t5.hf.space",
-    ssl_verify=False,
-)
+# HF Space clients (YOLO + LLM)
+yolo_client = Client("jeyanthangj2004/engg-draw-extractor")
+llm_client  = Client("jeyanthangj2004/eng-draw-llm-flan-t5")
 
 
 def encode_image_to_base64(image_path_or_obj):
@@ -85,7 +77,7 @@ async def analyze_page(
     Main orchestrator endpoint:
     - Receives image + optional VLM URL.
     - Calls YOLO Space for detections + crops.
-    - If VLM URL is provided, calls VLM:
+    - If VLM URL is provided, tries to call VLM:
         - full page → full_page_vlm_text
         - each enhanced crop → crop["vlm_text"]
     - Builds analysis text (VLM-first, YOLO fallback) and calls LLM Space for a summary.
@@ -124,7 +116,8 @@ async def analyze_page(
         if vlm_url:
             try:
                 print("Initializing VLM client...")
-                vlm_client = Client(vlm_url, ssl_verify=False)
+                vlm_client = Client(vlm_url)
+                print(f"Loaded VLM API: {vlm_url}")
 
                 print("Calling VLM on full page...")
                 full_page_vlm_text = vlm_client.predict(
@@ -235,5 +228,6 @@ async def analyze_page(
 
 
 if __name__ == "__main__":
-    # For local development
-    uvicorn.run(app, host="127.0.0.1", port=8000, reload=True)
+    import os
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
