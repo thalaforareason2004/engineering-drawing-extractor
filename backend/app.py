@@ -66,7 +66,6 @@ async def analyze_page(
     temp_file_path = os.path.join(temp_dir, file.filename)
 
     try:
-        # Save uploaded file
         with open(temp_file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
@@ -84,7 +83,7 @@ async def analyze_page(
 
         annotated_image_b64 = encode_image_to_base64(annotated_info)
 
-        # 2. VLM – FULL PAGE (RAW IMAGE ONLY)
+        # 2. VLM – FULL PAGE (RAW ONLY)
         vlm_client = None
         full_page_vlm_text = None
 
@@ -93,9 +92,11 @@ async def analyze_page(
                 vlm_client = Client(vlm_url)
 
                 full_page_vlm_text = vlm_client.predict(
-                    raw_image=handle_file(temp_file_path),
-                    region_type="page",
-                    max_new_tokens=512,
+                    handle_file(temp_file_path),  # raw_image
+                    "page",                       # region_type
+                    None,                         # full_page_text (NOT USED)
+                    None,                         # enhanced_image (NOT USED)
+                    512,                          # max_new_tokens
                     api_name="/predict",
                 )
             except Exception as e:
@@ -103,10 +104,9 @@ async def analyze_page(
                 vlm_client = None
                 full_page_vlm_text = None
 
-        # Context for crops
-        page_context_for_crops = full_page_vlm_text or ""
+        page_context_for_crops = full_page_vlm_text
 
-        # 3. Crop loop (RAW + ENHANCED)
+        # 3. Crops (RAW + ENHANCED + CONTEXT)
         crops_data = []
         num_crops = min(len(raw_crops_info), len(enh_crops_info))
 
@@ -124,14 +124,14 @@ async def analyze_page(
             box      = det.get("box") or []
 
             vlm_text = None
-            if vlm_client and raw_crop_path:
+            if vlm_client and raw_crop_path and enh_crop_path:
                 try:
                     vlm_text = vlm_client.predict(
-                        raw_image=handle_file(raw_crop_path),
-                        enhanced_image=handle_file(enh_crop_path),
-                        region_type=cls_name,
-                        full_page_text=page_context_for_crops,
-                        max_new_tokens=256,
+                        handle_file(raw_crop_path),   # raw_image
+                        cls_name,                     # region_type
+                        page_context_for_crops,       # full_page_text (REQUIRED)
+                        handle_file(enh_crop_path),   # enhanced_image
+                        256,                          # max_new_tokens
                         api_name="/predict",
                     )
                 except Exception as e:
@@ -147,7 +147,7 @@ async def analyze_page(
                 "vlm_text": vlm_text,
             })
 
-        # 4. Build analysis for LLM
+        # 4. LLM input
         analysis_parts = []
 
         if full_page_vlm_text:
@@ -162,13 +162,7 @@ async def analyze_page(
                     f"{crop['vlm_text']}"
                 )
 
-        if not analysis_parts:
-            analysis_text = "\n".join(
-                f"class={d.get('cls_name','unknown')}, conf={d.get('conf',0):.2f}, box={d.get('box',[])}"
-                for d in detections
-            )
-        else:
-            analysis_text = "\n".join(analysis_parts)
+        analysis_text = "\n".join(analysis_parts) if analysis_parts else ""
 
         # 5. LLM summary
         summary = llm_client.predict(
