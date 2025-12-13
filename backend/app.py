@@ -84,7 +84,7 @@ async def analyze_page(
 
         annotated_image_b64 = encode_image_to_base64(annotated_info)
 
-        # 2. VLM full page FIRST
+        # 2. VLM – FULL PAGE (RAW IMAGE ONLY)
         vlm_client = None
         full_page_vlm_text = None
 
@@ -94,7 +94,6 @@ async def analyze_page(
 
                 full_page_vlm_text = vlm_client.predict(
                     raw_image=handle_file(temp_file_path),
-                    enhanced_image=handle_file(temp_file_path),
                     region_type="page",
                     max_new_tokens=512,
                     api_name="/predict",
@@ -104,10 +103,10 @@ async def analyze_page(
                 vlm_client = None
                 full_page_vlm_text = None
 
-        # This is the CONTEXT passed to every crop
+        # Context for crops
         page_context_for_crops = full_page_vlm_text or ""
 
-        # 3. Crop loop (VLM uses full-page context)
+        # 3. Crop loop (RAW + ENHANCED)
         crops_data = []
         num_crops = min(len(raw_crops_info), len(enh_crops_info))
 
@@ -127,13 +126,11 @@ async def analyze_page(
             vlm_text = None
             if vlm_client and raw_crop_path:
                 try:
-                    enhanced_for_vlm = enh_crop_path or raw_crop_path
-
                     vlm_text = vlm_client.predict(
                         raw_image=handle_file(raw_crop_path),
-                        enhanced_image=handle_file(enhanced_for_vlm),
+                        enhanced_image=handle_file(enh_crop_path),
                         region_type=cls_name,
-                        full_page_context=page_context_for_crops,  # ✅ CONTEXT ADDED
+                        full_page_text=page_context_for_crops,
                         max_new_tokens=256,
                         api_name="/predict",
                     )
