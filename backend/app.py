@@ -9,7 +9,7 @@ import os
 import shutil
 import tempfile
 
-
+os.environ["OPENROUTER_API_KEY"] = "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"
 
 from openai import OpenAI  # For OpenRouter
 
