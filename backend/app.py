@@ -24,7 +24,7 @@ app.add_middleware(
 # ---------------- HF Space clients (YOLO + LLM) ----------------
 
 yolo_client = Client("jeyanthangj2004/engg-draw-extractor")
-llm_client  = Client("jeyanthangj2004/eng-draw-llm-flan-t5")
+llm_client = Client("jeyanthangj2004/eng-draw-llm-flan-t5")
 
 # ---------------- OpenRouter VLM client (fallback when no Gradio URL) ----------------
 
@@ -82,64 +82,59 @@ def pil_image_to_base64_str(pil_image: Image.Image) -> str:
     return base64.b64encode(buf.getvalue()).decode("utf-8")
 
 
-# ---------------- VLM prompt templates ----------------
+# ---------------- VLM prompt templates (simplified) ----------------
 
 def full_page_prompt():
     return (
-        "You are an assistant that qualitatively describes full engineering drawing sheets. "
-        "You are given an image of a COMPLETE engineering drawing page. "
-        "Write EXACTLY THREE concise sentences. Do NOT number the sentences. Each sentence must be on a new line. "
-        "Sentence 1 should state what general type of component or assembly this page appears to describe. "
-        "Sentence 2 should describe the types of views present on the page and what aspects of the part they show. "
-        "Sentence 3 should mention any clearly visible title block information and whether a table or BOM is present."
+        "You see a complete engineering drawing page. "
+        "Write EXACTLY THREE short sentences, each on its own line, and do NOT number them. "
+        "Sentence 1: say what general type of component or assembly this page appears to show. "
+        "Sentence 2: say what views are present (for example front, side, section, isometric) and what aspects of the part they highlight. "
+        "Sentence 3: mention any visible title-block information and whether a table or BOM is present."
     )
 
 
-def drawing_crop_prompt(full_page_text):
+def drawing_crop_prompt(full_page_text: str):
     return (
-        "You are given a combined cropped image where the ORIGINAL region is on the left and the ENHANCED region is on the right. "
-        f"The full engineering drawing was previously described as follows: {full_page_text} "
-        "This cropped region shows only part of that same drawing. Without repeating the full-page description, "
-        "describe this cropped region in EXACTLY THREE concise sentences, each on its own line. "
-        "Sentence 1: what part or sub-component this region represents. "
-        "Sentence 2: what view type(s) are visible and what geometry they highlight. "
-        "Sentence 3: key qualitative geometric features without numeric values."
+        f"The full engineering drawing page was previously described as: {full_page_text} "
+        "Now you see a CROPPED REGION of that same drawing. "
+        "Write EXACTLY THREE short sentences, each on its own line, and do NOT number them. "
+        "Sentence 1: say what part or sub-component this cropped region represents. "
+        "Sentence 2: say what kind of view(s) are shown here and what geometry they focus on. "
+        "Sentence 3: describe key qualitative geometric features visible in this region without using numeric values."
     )
 
 
-def title_block_crop_prompt(full_page_text):
+def title_block_crop_prompt(full_page_text: str):
     return (
-        "You are given a combined cropped image where the ORIGINAL region is on the left and the ENHANCED region is on the right. "
-        f"The full engineering drawing was previously described as follows: {full_page_text} "
-        "This cropped region shows only the title block area. Without repeating the full-page description, "
-        "describe this title block region in EXACTLY THREE concise sentences, each on its own line. "
-        "Sentence 1: drawing number, title, and revision if readable, otherwise say unreadable. "
-        "Sentence 2: scale and sheet number if visible, otherwise say unreadable. "
-        "Sentence 3: material, date, and drafter if readable, otherwise say unreadable."
+        f"The full engineering drawing page was previously described as: {full_page_text} "
+        "Now you see a CROPPED TITLE BLOCK REGION from that same drawing. "
+        "Write EXACTLY THREE short sentences, each on its own line, and do NOT number them. "
+        "Sentence 1: give drawing number, title and revision if readable, otherwise say they are unreadable. "
+        "Sentence 2: give scale and sheet number if visible, otherwise say they are unreadable. "
+        "Sentence 3: mention material, date and drafter if readable, otherwise say they are unreadable."
     )
 
 
-def table_crop_prompt(full_page_text):
+def table_crop_prompt(full_page_text: str):
     return (
-        "You are given a combined cropped image where the ORIGINAL region is on the left and the ENHANCED region is on the right. "
-        f"The full engineering drawing was previously described as follows: {full_page_text} "
-        "This cropped region shows a table from that drawing. Without repeating the full-page description, "
-        "describe this table region in EXACTLY THREE concise sentences, each on its own line. "
-        "Sentence 1: what kind of table it is and which column headings are visible. "
+        f"The full engineering drawing page was previously described as: {full_page_text} "
+        "Now you see a CROPPED TABLE REGION from that same drawing. "
+        "Write EXACTLY THREE short sentences, each on its own line, and do NOT number them. "
+        "Sentence 1: say what kind of table this is and list the visible column headings. "
         "Sentence 2: describe one to three example rows in words. "
         "Sentence 3: summarize what this table represents for the overall drawing."
     )
 
 
-def detail_crop_prompt(full_page_text):
+def detail_crop_prompt(full_page_text: str):
     return (
-        "You are given a combined cropped image where the ORIGINAL region is on the left and the ENHANCED region is on the right. "
-        f"The full engineering drawing was previously described as follows: {full_page_text} "
-        "This cropped region shows a local detail view. Without repeating the full-page description, "
-        "describe this detail region in EXACTLY THREE concise sentences, each on its own line. "
-        "Sentence 1: what local feature this detail focuses on. "
-        "Sentence 2: any labels or callouts and what they refer to. "
-        "Sentence 3: visible notes or tolerances, described qualitatively without numeric values."
+        f"The full engineering drawing page was previously described as: {full_page_text} "
+        "Now you see a CROPPED DETAIL VIEW from that same drawing. "
+        "Write EXACTLY THREE short sentences, each on its own line, and do NOT number them. "
+        "Sentence 1: say what local feature or area this detail focuses on. "
+        "Sentence 2: mention any labels or callouts and what they point to. "
+        "Sentence 3: summarize any visible notes or tolerances in qualitative terms without numeric values."
     )
 
 
@@ -265,7 +260,7 @@ async def analyze_page(
         annotated_info = yolo_result[0]
         raw_crops_info = yolo_result[1]
         enh_crops_info = yolo_result[2]
-        detections     = yolo_result[3]
+        detections = yolo_result[3]
 
         annotated_image_b64 = encode_image_to_base64(annotated_info)
 
@@ -321,8 +316,8 @@ async def analyze_page(
             det = detections[i] if i < len(detections) else {}
 
             cls_name = det.get("cls_name") or det.get("label") or det.get("class") or "unknown"
-            conf     = det.get("conf") or det.get("score") or 0.0
-            box      = det.get("box") or []
+            conf = det.get("conf") or det.get("score") or 0.0
+            box = det.get("box") or []
 
             vlm_text = None
 
