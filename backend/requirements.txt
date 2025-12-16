@@ -1,5 +1,6 @@
-fastapi
-uvicorn[standard]
-pillow
-gradio_client
-python-multipart
+fastapi>=0.110.0
+uvicorn[standard]>=0.30.0
+gradio_client>=0.16.0
+pillow>=10.0.0
+openai>=1.6.0
+python-multipart>=0.0.9
