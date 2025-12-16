@@ -294,7 +294,7 @@ async def analyze_page(
                         pil_image=pil_full,
                         region_type="page",
                         full_page_text=None,
-                        max_new_tokens=512,
+                        max_new_tokens=1024,
                     )
             except Exception as e:
                 print(f"Full-page VLM (OpenRouter) error: {e}")
@@ -346,7 +346,7 @@ async def analyze_page(
                             pil_image=pil_raw,
                             region_type=cls_name,
                             full_page_text=page_context_for_crops,
-                            max_new_tokens=256,
+                            max_new_tokens=1024,
                         )
                 except Exception as e:
                     print(f"Crop VLM (OpenRouter) error {i}: {e}")
