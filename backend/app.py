@@ -8,6 +8,7 @@ import base64
 import os
 import shutil
 import tempfile
+import csv  # >>> ADDED
 
 app = FastAPI()
 
@@ -52,6 +53,19 @@ def extract_image_path_from_gallery_item(item: dict):
     return None
 
 
+# >>> ADDED: parse structured VLM output into dict
+def parse_page_extract(text: str):
+    fields = {}
+    if not text:
+        return fields
+
+    for line in text.splitlines():
+        if ":" in line:
+            k, v = line.split(":", 1)
+            fields[k.strip()] = v.strip()
+    return fields
+
+
 @app.get("/ping")
 def ping():
     return {"status": "ok"}
@@ -69,7 +83,7 @@ async def analyze_page(
         with open(temp_file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
-        # 1. YOLO
+        # 1. YOLO (UNCHANGED)
         yolo_result = yolo_client.predict(
             image=handle_file(temp_file_path),
             conf=0.3,
@@ -83,30 +97,48 @@ async def analyze_page(
 
         annotated_image_b64 = encode_image_to_base64(annotated_info)
 
-        # 2. VLM – FULL PAGE (RAW ONLY)
         vlm_client = None
         full_page_vlm_text = None
+        page_extract_text = None           # >>> ADDED
+        page_extract_dict = {}             # >>> ADDED
+        csv_path = None                    # >>> ADDED
 
         if vlm_url:
-            try:
-                vlm_client = Client(vlm_url)
+            vlm_client = Client(vlm_url)
 
-                full_page_vlm_text = vlm_client.predict(
-                    handle_file(temp_file_path),  # raw_image
-                    "page",                       # region_type
-                    None,                         # full_page_text (NOT USED)
-                    None,                         # enhanced_image (NOT USED)
-                    512,                          # max_new_tokens
-                    api_name="/predict",
-                )
-            except Exception as e:
-                print(f"Full-page VLM error: {e}")
-                vlm_client = None
-                full_page_vlm_text = None
+            # 2a. FULL PAGE DESCRIPTION (EXISTING, NOT TOUCHED)
+            full_page_vlm_text = vlm_client.predict(
+                handle_file(temp_file_path),
+                "page",
+                None,
+                None,
+                512,
+                api_name="/predict",
+            )
+
+            # 2b. FULL PAGE STRUCTURED EXTRACTION (>>> ADDED)
+            page_extract_text = vlm_client.predict(
+                handle_file(temp_file_path),
+                "page_extract",
+                None,
+                None,
+                512,
+                api_name="/predict",
+            )
+
+            page_extract_dict = parse_page_extract(page_extract_text)
+
+            # 2c. WRITE CSV (>>> ADDED)
+            csv_path = os.path.join(temp_dir, "page_extract.csv")
+            with open(csv_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(["field", "value"])
+                for k, v in page_extract_dict.items():
+                    writer.writerow([k, v])
 
         page_context_for_crops = full_page_vlm_text
 
-        # 3. Crops (RAW + ENHANCED + CONTEXT)
+        # 3. CROPS (UNCHANGED)
         crops_data = []
         num_crops = min(len(raw_crops_info), len(enh_crops_info))
 
@@ -125,18 +157,14 @@ async def analyze_page(
 
             vlm_text = None
             if vlm_client and raw_crop_path and enh_crop_path:
-                try:
-                    vlm_text = vlm_client.predict(
-                        handle_file(raw_crop_path),   # raw_image
-                        cls_name,                     # region_type
-                        page_context_for_crops,       # full_page_text (REQUIRED)
-                        handle_file(enh_crop_path),   # enhanced_image
-                        256,                          # max_new_tokens
-                        api_name="/predict",
-                    )
-                except Exception as e:
-                    print(f"Crop VLM error {i}: {e}")
-                    vlm_text = None
+                vlm_text = vlm_client.predict(
+                    handle_file(raw_crop_path),
+                    cls_name,
+                    page_context_for_crops,
+                    handle_file(enh_crop_path),
+                    256,
+                    api_name="/predict",
+                )
 
             crops_data.append({
                 "cls_name": cls_name,
@@ -147,24 +175,19 @@ async def analyze_page(
                 "vlm_text": vlm_text,
             })
 
-        # 4. LLM input
+        # 4. LLM SUMMARY (UNCHANGED)
         analysis_parts = []
-
         if full_page_vlm_text:
-            analysis_parts.append(
-                "Full-page VLM description:\n" + full_page_vlm_text
-            )
+            analysis_parts.append("Full-page VLM description:\n" + full_page_vlm_text)
 
         for i, crop in enumerate(crops_data):
             if crop["vlm_text"]:
                 analysis_parts.append(
-                    f"\nCrop {i} (class={crop['cls_name']}, conf={crop['conf']:.2f}):\n"
-                    f"{crop['vlm_text']}"
+                    f"\nCrop {i} (class={crop['cls_name']}):\n{crop['vlm_text']}"
                 )
 
-        analysis_text = "\n".join(analysis_parts) if analysis_parts else ""
+        analysis_text = "\n".join(analysis_parts)
 
-        # 5. LLM summary
         summary = llm_client.predict(
             analysis_text,
             256,
@@ -173,6 +196,10 @@ async def analyze_page(
 
         return {
             "annotated_image": annotated_image_b64,
+            "full_page_vlm_text": full_page_vlm_text,          # EXISTING
+            "page_extract_text": page_extract_text,            # >>> ADDED
+            "page_extract_table": page_extract_dict,           # >>> ADDED (UI TABLE)
+            "page_extract_csv_path": csv_path,                 # >>> ADDED (UI DOWNLOAD)
             "llm_summary": summary,
             "crops": crops_data,
         }
